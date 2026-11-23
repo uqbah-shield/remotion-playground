@@ -29,9 +29,28 @@ header {
 header .file { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
 .spacer { flex: 1; }
 
-main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 460px; min-height: 0; }
-.editor { min-height: 0; border-right: 1px solid var(--border); }
-.side { display: flex; flex-direction: column; gap: 12px; padding: 12px; overflow: auto; min-height: 0; }
+main {
+  flex: 1; display: grid; min-height: 0;
+  grid-template-columns: var(--editor-width, 38%) 6px minmax(0, 1fr);
+}
+main.dragging { cursor: col-resize; user-select: none; }
+/* Iframe/canvas di Monaco & Player jangan menelan event saat drag */
+main.dragging .editor, main.dragging .side { pointer-events: none; }
+.editor { min-height: 0; min-width: 0; }
+.splitter {
+  cursor: col-resize; background: var(--border); position: relative; touch-action: none;
+  transition: background .15s;
+}
+.splitter::after { content: ""; position: absolute; inset: 0 -4px; } /* area sentuh lebih lebar */
+.splitter:hover, .splitter:focus-visible, main.dragging .splitter { background: var(--accent); outline: none; }
+.side {
+  display: flex; flex-direction: column; gap: 12px; padding: 12px; overflow: auto; min-height: 0;
+  container-type: inline-size;
+}
+.side-panels { display: flex; flex-direction: column; gap: 12px; }
+@container (min-width: 760px) {
+  .side-panels { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+}
 
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .title { font-weight: 600; }
@@ -54,8 +73,9 @@ button.link { background: none; border: none; color: var(--accent); padding: 0; 
 
 .preview {
   position: relative; background: #000; border-radius: 10px; overflow: hidden;
-  display: flex; align-items: center; justify-content: center; min-height: 200px; max-height: 60vh;
+  display: flex; align-items: center; justify-content: center; min-height: 200px; max-height: 62vh; flex-shrink: 0;
 }
+.preview > div { max-height: 100%; }
 .preview > div { max-width: 100%; }
 .checker {
   background-color: #fff;
@@ -81,6 +101,9 @@ button.link { background: none; border: none; color: var(--accent); padding: 0; 
 
 @media (max-width: 900px) {
   main { grid-template-columns: 1fr; grid-template-rows: 45vh auto; }
-  .editor { border-right: none; border-bottom: 1px solid var(--border); }
+  .splitter { display: none; }
+  header { flex-wrap: wrap; }
+  header .spacer { display: none; }
+  .editor { border-bottom: 1px solid var(--border); }
   .presets { grid-template-columns: repeat(3, 1fr); }
 }
