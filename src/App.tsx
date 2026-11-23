@@ -28,6 +28,62 @@ function useDebounced<T>(value: T, ms: number) {
   return v;
 }
 
+const SPLIT_KEY = "remotion-playground:editor-width";
+const DEFAULT_PCT = 38;
+const MIN_PCT = 20;
+const MAX_PCT = 65;
+const clampPct = (n: number) => Math.min(MAX_PCT, Math.max(MIN_PCT, n));
+
+/** Lebar editor (persen) yang bisa diubah dengan drag, disimpan di localStorage. */
+function useSplit() {
+  const mainRef = useRef<HTMLElement>(null);
+  const [editorPct, setEditorPct] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem(SPLIT_KEY));
+      return v ? clampPct(v) : DEFAULT_PCT;
+    } catch {
+      return DEFAULT_PCT;
+    }
+  });
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SPLIT_KEY, String(editorPct));
+    } catch {}
+  }, [editorPct]);
+
+  function onSplitterDown(e: React.PointerEvent<HTMLDivElement>) {
+    const main = mainRef.current;
+    if (!main || e.button !== 0) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    setDragging(true);
+    const rect = main.getBoundingClientRect();
+    const move = (ev: PointerEvent) => setEditorPct(clampPct(((ev.clientX - rect.left) / rect.width) * 100));
+    const up = () => {
+      setDragging(false);
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  }
+
+  function onSplitterKey(e: React.KeyboardEvent) {
+    const step = e.shiftKey ? 10 : 2;
+    if (e.key === "ArrowLeft") setEditorPct((p) => clampPct(p - step));
+    else if (e.key === "ArrowRight") setEditorPct((p) => clampPct(p + step));
+    else return;
+    e.preventDefault();
+  }
+
+  return { mainRef, editorPct, dragging, onSplitterDown, onSplitterKey, resetSplit: () => setEditorPct(DEFAULT_PCT) };
+}
+
 export function App() {
   const [code, setCode] = useState(load);
   const [fileName, setFileName] = useState("video.jsx");
@@ -42,6 +98,7 @@ export function App() {
   const [job, setJob] = useState<Job | null>(null);
   const playerRef = useRef<PlayerRef>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const { mainRef, editorPct, dragging, onSplitterDown, onSplitterKey, resetSplit } = useSplit();
 
   useEffect(() => {
     try {
@@ -161,7 +218,11 @@ export function App() {
         </button>
       </header>
 
-      <main>
+      <main
+        ref={mainRef}
+        className={dragging ? "dragging" : ""}
+        style={{ "--editor-width": `${editorPct}%` } as React.CSSProperties}
+      >
         <section className="editor">
           <Editor
             path="video.tsx"
@@ -173,7 +234,47 @@ export function App() {
           />
         </section>
 
+        <div
+          className="splitter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Ubah lebar editor"
+          aria-valuenow={Math.round(editorPct)}
+          aria-valuemin={MIN_PCT}
+          aria-valuemax={MAX_PCT}
+          tabIndex={0}
+          title="Geser untuk mengubah lebar · klik dua kali untuk reset"
+          onPointerDown={onSplitterDown}
+          onKeyDown={onSplitterKey}
+          onDoubleClick={resetSplit}
+        />
+
         <section className="side">
+          <div className="preview" style={{ aspectRatio: `${width} / ${height}` }}>
+            {compiled.error && <pre className="error">{compiled.error}</pre>}
+            <Player
+              key={`${width}x${height}-${playerKey}`}
+              ref={playerRef}
+              component={Runner}
+              inputProps={inputProps}
+              durationInFrames={durationInFrames}
+              fps={fps}
+              compositionWidth={width}
+              compositionHeight={height}
+              controls
+              loop
+              autoPlay
+              acknowledgeRemotionLicense
+              className={transparent ? "checker" : ""}
+              style={{ width: "100%", maxHeight: "100%", aspectRatio: `${width} / ${height}` }}
+              errorFallback={({ error }) => {
+                crashed.current = true;
+                return <pre className="error inside">{error.message}</pre>;
+              }}
+            />
+          </div>
+
+          <div className="side-panels">
           <div className="panel">
             <label className="title">Ukuran video</label>
             <div className="presets">
@@ -244,30 +345,6 @@ export function App() {
             )}
           </div>
 
-          <div className="preview">
-            {compiled.error && <pre className="error">{compiled.error}</pre>}
-            <Player
-              key={`${width}x${height}-${playerKey}`}
-              ref={playerRef}
-              component={Runner}
-              inputProps={inputProps}
-              durationInFrames={durationInFrames}
-              fps={fps}
-              compositionWidth={width}
-              compositionHeight={height}
-              controls
-              loop
-              autoPlay
-              acknowledgeRemotionLicense
-              className={transparent ? "checker" : ""}
-              style={{ width: "100%", maxHeight: "100%", aspectRatio: `${width} / ${height}` }}
-              errorFallback={({ error }) => {
-                crashed.current = true;
-                return <pre className="error inside">{error.message}</pre>;
-              }}
-            />
-          </div>
-
           <div className="panel">
             <label className="title">Render</label>
             <div className="formats">
@@ -308,6 +385,7 @@ export function App() {
                 {job.error && <pre className="error">{job.error}</pre>}
               </div>
             )}
+          </div>
           </div>
         </section>
       </main>
